@@ -1,0 +1,214 @@
+---
+title: "selective_play"
+author: "Jack Lipei Tang"
+date: "11/9/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Import packages
+```{r import}
+#Import packages
+setwd("~/Desktop/political play in WoT/")
+library(brms)
+library(broom.mixed)
+library(car)
+library(corrplot)
+library(dplyr)
+library(emmeans)
+library(ggplot2)
+library(glmmTMB)
+library(interactions)
+library(lme4)
+library(lmerTest)
+library(modelsummary)
+library(MuMIn)
+library(optimx)
+library(plyr)
+library(psych)
+library(r2mlm)
+library(readr)
+library(reshape2)
+library(sjPlot)
+library(splines)
+library(stringi)
+library(tidyr)
+library(tidyverse)
+
+theme_set(theme_bw())
+
+#increase the max print, and turn off scientific notation
+options(scipen=999)
+options(max.print=99999999)
+
+data <- read.csv("data_ica.csv")
+data_long <- read.csv("data_long.csv")
+```
+
+
+
+```{r rq1}
+
+m01 <- lmer(us_pct ~ military_y + liberal + conser + (1 | id), data = data_long)
+
+m01.1 <- lmer(us_pct ~ age.z + inc.z + edu.z
+              + rating_t1.z + unlock.z + battle.z + week
+              + military_y + liberal + conser 
+              + (1 | id), data = data_long)
+
+m02 <- lmer(cn_pct ~ military_y + liberal + conser  + (1 | id), data = data_long)
+
+m02.1 <- lmer(cn_pct ~ age.z + inc.z + edu.z
+              + rating_t1.z + unlock.z + battle.z + week
+              + military_y + liberal + conser
+              + (1 | id), data = data_long)
+
+m03 <- lmer(ussr_pct ~ military_y + liberal + conser  + (1 | id), data = data_long)
+
+m03.1 <- lmer(ussr_pct ~ age.z + inc.z + edu.z
+              + rating_t1.z + unlock.z + battle.z + week
+              + military_y + liberal + conser
+              + (1 | id), data = data_long)
+
+msummary(list(
+  "U.S. vehicles (Baseline Model 1)" = m01,
+  "U.S.S.R. vehicles (Baseline Model 2)" = m03,
+  "Chinese vehicles (Baseline Model 3)" = m02,
+  "U.S. vehicles (Full Model 4)" = m01.1,
+  "U.S.S.R. vehicles (Full Model 5)" = m03.1,
+  "Chinese vehicles (Full Model 6)" = m02.1),
+  title = 'Multilevel Models Predicting Vehicle Selection',
+  stars = TRUE,
+  statistic = c('std.error')
+)
+```
+
+```{r timeeffec}
+
+data_long$login_hr <- data_long$login_wk/60
+data_long$login_hr.log <- log(data_long$login_hr+1) #Login time is very skewed
+
+m_cs1 <- glmmTMB(login_hr.log ~ 0 + factor(week) + (1 | id), #compound symmetry model
+                        data = data_long)
+
+m_gca1 <- glmmTMB(login_hr.log ~ week + (week | id), #general 
+                  data = data_long)
+
+m_pw1 <- glmmTMB(login_hr.log ~ phase1 + phase2 + phase3 + (phase1 + phase2 + phase3 | id),
+                data = data_long)
+
+anova(m_gca1, m_pw1)
+
+msummary(list(
+  "Growth Curve Model" = m_gca1,
+  "Piecewise Growth Model" = m_pw1),
+  title = 'Multilevel Growth Curve Models Predicting Gaming Behavors',
+  stars = TRUE,
+  statistic = c('std.error')
+)
+```
+
+#Model equations for models in RQ2
+
+Level 1:
+$$
+  \begin{aligned}
+     \text{Outcome}_{ti} = \beta_{0i} + \beta_{1i} \text{US\_pmc}_{ti} + \beta_{2i} \text{USSR\_pmc}_{ti}+ \beta_{3i}    
+     \text{China\_pmc}_{ti} +       e_{ti}
+  \end{aligned}
+$$
+
+
+Level 2:
+$$
+  \begin{aligned}
+    \beta_{0i} = \gamma_{00} + \gamma_{01} \text{US\_pm}_{i} + 
+                   \gamma_{02} \text{USSR\_pm}_i + 
+                   \gamma_{03} \text{China\_pm}_{i} + 
+                   \gamma_{04} \text{Ideology}_{i} + 
+                   \gamma_{05} \text{Military}_{i} +\\
+                   \gamma_{06} \text{Phase1}_{i} + 
+                   \gamma_{07} \text{Phase2}_{i} + 
+                   \gamma_{08} \text{Phase3}_{i} +\\
+                   \gamma_{09} \text{Rating}_{i} + 
+                   \gamma_{10} \text{Unlocked}_{i} + 
+                   \gamma_{11} \text{Battle}_{i} +\\
+                   \gamma_{12} \text{Age}_{i} + 
+                   \gamma_{13} \text{Edu}_{i} + 
+                   \gamma_{14} \text{Income}_{i}
+                   + u_{0i}  \\
+  \end{aligned}
+$$
+
+
+
+```{r rq2}
+
+m06.d <- glmmTMB(login_hr.log ~ age.z + edu.z + inc.z
+               + rating_t1.z + unlock.z + battle.z
+               + phase1 + phase2 + phase3
+               + us_cmc + cn_cmc + ussr_cmc 
+               + us_cm + cn_cm + ussr_cm
+               + liberal + conser + military_y
+               + (us_cmc + cn_cmc + ussr_cmc | id),
+               data = data_long, REML = TRUE) 
+
+data_long$battle_wk.log <- log(data_long$battle_wk+1) #battle_wk is very skewed
+
+m07.d <- glmmTMB(battle_wk.log ~ age.z + edu.z + inc.z
+                 + rating_t1.z + unlock.z + battle.z
+                 + phase1 + phase2 + phase3
+                 + us_cmc + cn_cmc + ussr_cmc 
+                 + us_cm + cn_cm + ussr_cm
+                 + liberal + conser + military_y
+                 + (us_cmc + cn_cmc + ussr_cmc | id),
+                 data = data_long, REML = TRUE)
+
+m08.d <- glmmTMB(win_pct ~ age.z + edu.z + inc.z
+                 + rating_t1.z + unlock.z + battle.z
+                 + phase1 + phase2 + phase3
+                 + us_cmc + cn_cmc + ussr_cmc 
+                 + us_cm + cn_cm + ussr_cm
+                 + liberal + conser + military_y
+                 + (us_cmc + cn_cmc + ussr_cmc | id),
+                 data = data_long, REML = TRUE) 
+
+data_long$team_wk.log <- log(data_long$team_wk+1) #team_wk is very skewed
+
+m09.d <- glmmTMB(team_wk.log ~ age.z + edu.z + inc.z
+                 + rating_t1.z + unlock.z + battle.z
+                 + phase1 + phase2 + phase3
+                 + us_cmc + cn_cmc + ussr_cmc 
+                 + us_cm + cn_cm + ussr_cm
+                 + liberal + conser + military_y
+                 + (us_cmc + cn_cmc + ussr_cmc | id),
+                 data = data_long, REML = TRUE)
+
+msummary(list(
+  "Gaming time (Model 7)" = m06.d,
+  "Battle count (Model 8)" = m07.d,
+  "Team battle (Model 9)" = m09.d,
+  "Win rate (Model 10)" = m08.d),
+  title = 'Multilevel Growth Curve Models Predicting Gaming Behavors and Performance',
+  stars = TRUE,
+  statistic = c('std.error')
+)
+
+```
+
+```{r icc}
+
+ran_int <- lmer(cn_pct ~ 1 + (1 | id), data = data_long)
+variance_components <- as.data.frame(VarCorr(ran_int))
+between_var <- variance_components$vcov[1]
+within_var <- variance_components$vcov[2]
+(icc <- between_var / (between_var + within_var))
+
+```
+
+#For plot please refer to my prosepctus (or paper)
